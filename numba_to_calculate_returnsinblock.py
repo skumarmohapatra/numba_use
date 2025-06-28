@@ -5,13 +5,14 @@ import yfinance as yf
 from nsetools import Nse
 from datetime import datetime
 import time
+from pandas import ExcelWriter
 
 start_time = time.time()
 
 # Step 1: Get NSE stock symbols
 nse = Nse()
 stock_codes = nse.get_stock_codes()[1:] # Skip header
-tickers = [code + '.NS' for code in stock_codes[:1000]]
+tickers = [code + '.NS' for code in stock_codes[:50]]
 
 start_date = "2020-01-01"
 end_date = "2025-06-10"
@@ -43,7 +44,8 @@ print(len(data_combined))
 
 
 # Step 3: Numba-accelerated return calculation
-@jit(nopython=True)
+#@jit(nopython=True)
+@njit
 def calculate_returns_numba(prices):
     """
     Calculates percentage returns from a 1D NumPy array of prices.
@@ -56,26 +58,24 @@ def calculate_returns_numba(prices):
     return returns
 
 
+print(type(data_combined[1]['Close'].to_numpy()))
 for i in range(len(data_combined)):
-    try:
-        data_combined[i]['Returns']=[None]*len(data_combined[i]['Close'])
-        # Extract the price column as a NumPy array
-        price_array = data_combined[i]['Close'][data_combined[i]].to_numpy()
-        # Apply the Numba-jitted function
-        returns_array = calculate_returns_numba(price_array) 
-        if not data_combined[i].empty:
-            # Add the returns as a new column to the DataFrame
-            data_combined[i]['Returns'] = returns_array
-        else:
-            print(f"Error fetching {data_combined[i]['Close'].columns.values[0]}")
-    except Exception as e:
-        #print(f"Error fetching {data_combined[i]['Close']}: {e}")
-        #data_combined.remove(data_combined[i])
-        pass
+    data_combined[i]['Returns'] = calculate_returns_numba(data_combined[i]['Close'].to_numpy())
+    
 
 #print("data combined final")
 print(len(data_combined))
 print(data_combined)
+
+# Write to different sheets in the same Excel file
+with pd.ExcelWriter('50_sheet_output.xlsx', engine='xlsxwriter') as writer:
+    for i in range(len(data_combined)):
+        data_combined[i].to_excel(writer, sheet_name=data_combined[i]['Close'].columns.values[0])
+    
+
+
+
+
 
 end_time = time.time()
 
